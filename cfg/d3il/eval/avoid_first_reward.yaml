@@ -1,0 +1,80 @@
+defaults:
+  - _self_
+hydra:
+  run:
+    dir: ${logdir}
+_target_: agent.eval.eval_diffusion_first_reward_agent.EvalDiffusionFirstRewardAgent
+
+# Steps until the first positive reward on D3IL avoid, for the checkpoints behind the
+# paper's avoid rows. One config for all three modes and both arms: the actor is
+# byte-identical in architecture across them, so only `mode` and `base_policy_path`
+# change. Set them on the command line, e.g.
+#   python script/run.py --config-name=avoid_first_reward \
+#     --config-path=../cfg/d3il/eval \
+#     mode=m1 tag=dia_m1_s42 \
+#     base_policy_path=log/d3il-finetune/smqavoid/smq_m1_s42/checkpoint/state_50.pt
+name: ${env_name}_${mode}_first_reward
+logdir: ${oc.env:DPPO_LOG_DIR}/d3il-eval/firstrew/${tag}
+mode: m1
+tag: run
+base_policy_path: ???
+normalization_path: ${oc.env:DPPO_DATA_DIR}/d3il/avoid_${mode}/normalization.npz
+
+seed: 42
+device: cuda:0
+env_name: avoiding-m5
+obs_dim: 4
+action_dim: 2
+denoising_steps: 20
+cond_steps: 1
+horizon_steps: 4
+act_steps: 4
+# the fine-tuned policy owns the last 10 of the 20 denoising steps
+ft_denoising_steps: 10
+# stochastic, as in training and in every other avoid rollout statistic
+deterministic: False
+
+n_steps: 25
+render_num: 0
+
+env:
+  n_envs: 50
+  name: ${env_name}
+  max_episode_steps: 100
+  reset_at_iteration: True
+  save_video: False
+  best_reward_threshold_for_success: 2
+  save_full_observations: True
+  wrappers:
+    d3il_lowdim:
+      normalization_path: ${normalization_path}
+    multi_step:
+      n_obs_steps: ${cond_steps}
+      n_action_steps: ${act_steps}
+      max_episode_steps: ${env.max_episode_steps}
+      pass_full_observations: ${env.save_full_observations}
+      pass_step_rewards: True
+      reset_within_step: False
+
+model:
+  _target_: model.diffusion.diffusion_eval.DiffusionEval
+  ft_denoising_steps: ${ft_denoising_steps}
+  predict_epsilon: True
+  denoised_clip_value: 1.0
+  randn_clip_value: 3
+  min_sampling_denoising_std: 0.1
+  network_path: ${base_policy_path}
+  network:
+    _target_: model.diffusion.mlp_diffusion.DiffusionMLP
+    time_dim: 16
+    mlp_dims: [512, 512, 512]
+    activation_type: ReLU
+    residual_style: True
+    cond_dim: ${eval:'${obs_dim} * ${cond_steps}'}
+    horizon_steps: ${horizon_steps}
+    action_dim: ${action_dim}
+  horizon_steps: ${horizon_steps}
+  obs_dim: ${obs_dim}
+  action_dim: ${action_dim}
+  denoising_steps: ${denoising_steps}
+  device: ${device}

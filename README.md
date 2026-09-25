@@ -50,6 +50,30 @@ chain finally emits:
    With `alpha = 0` this reduces exactly to DPPO. The outer advantage stays dominant;
    `alpha` controls how much denoising-level credit is layered on top.
 
+Nothing about the actor changes. `V_in` and the Q ensemble exist only to build the
+advantage, and at evaluation time a DIA policy is an ordinary diffusion policy.
+
+The knobs that matter live under `train:` in each config: `v_inner_alpha` (the `alpha`
+above), `v_inner_lambda` (`lambda_in`), `q_aggregation`, `critic_q_lr`,
+`target_ema_rate`, and `n_critic_warmup_itr`.
+
+## Relationship to DPPO
+
+This repository is a fork of [DPPO](https://github.com/irom-princeton/dppo)
+([paper](https://arxiv.org/abs/2409.00588)), and DPPO is both the codebase it is built
+on and the baseline it is compared against. The environment wrappers, diffusion policy,
+PPO update, dataset handling and configuration layout are DPPO's. DIA adds:
+
+- `agent/finetune/train_ppo_dia_diffusion_agent.py` and
+  `model/diffusion/diffusion_ppo_dia.py`, the agent and model implementing the above
+- `CriticObsInnerState` in `model/common/critic.py`, the inner value network
+- one `ft_dia_diffusion_mlp.yaml` per task under `cfg/`
+- the ablation agents under `agent/finetune/train_ablation_*.py`
+- a residual-RL baseline under `agent/residual/`
+
+The DPPO baseline in every comparison is this repository's own
+`ft_ppo_diffusion_mlp.yaml`, unchanged from upstream apart from the settings a fair
+comparison requires.
 
 ## Reproducing the results
 
@@ -74,6 +98,13 @@ python script/run.py --config-name=ft_dia_diffusion_mlp \
 Swap `ft_dia_diffusion_mlp` for `ft_ppo_diffusion_mlp` to run the DPPO baseline on the
 same task.
 
+**Franka Kitchen needs the checkpoints shipped here.** Kitchen observations contain
+many near-constant dimensions, and upstream's normalization divides by their range,
+which is ~0. `script/dataset/get_d4rl_dataset.py` in this repository floors that range
+and clips the result, and the kitchen base policies were pretrained on data regenerated
+that way. Those policies are committed under `pretrained/kitchen-*/`, and the kitchen
+configs point at them, so do not substitute the checkpoints from upstream's download
+link: they predate the fix and will not reproduce the kitchen results.
 
 ## Installation 
 

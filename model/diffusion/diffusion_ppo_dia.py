@@ -81,16 +81,6 @@ class PPODIADiffusion(PPODiffusion):
         td_loss = sum(((q.view(-1) - target) ** 2).mean() for q in cq)
         return td_loss
 
-    def loss_critic_q_to_target(self, obs, actions, q_target):
-        """Regress all N Q-heads (online net) to a PRECOMPUTED target (e.g. the SARSA(λ)
-        λ-return computed in the agent). Parallel to loss_critic_q but the target is supplied
-        rather than formed from a 1-step bootstrap inside the loss."""
-        cq = self.critic_q(obs, actions)
-        if not isinstance(cq, tuple):
-            cq = (cq,)
-        tgt = q_target.view(-1).detach()
-        return sum(((q.view(-1) - tgt) ** 2).mean() for q in cq)
-
     def update_critic_q_target(self, tau):
         for tp, sp in zip(self.critic_q_target.parameters(), self.critic_q.parameters()):
             tp.data.copy_(tp.data * (1 - tau) + sp.data * tau)

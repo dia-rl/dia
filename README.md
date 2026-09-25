@@ -1,6 +1,6 @@
 # DIA: Denoising Intermediate Advantage
 
-[[Paper](https://arxiv.org/abs/2609.12245)]&nbsp;&nbsp;[[Project page](https://dia-rl.github.io)]&nbsp;&nbsp;[[Built on DPPO](https://github.com/irom-princeton/dppo)]
+[[Paper](https://arxiv.org/abs/2609.12245)]&nbsp;&nbsp;[[Project page](https://dia-rl.github.io)]
 
 Arjun Sohal<sup>1</sup>, Yuchi Zhao<sup>1,2</sup>, Miroslav Bogdanovic<sup>1,2,3</sup>, Alan Aspuru-Guzik<sup>1,2,3,4,5</sup>
 
@@ -51,30 +51,6 @@ chain finally emits:
    With `alpha = 0` this reduces exactly to DPPO. The outer advantage stays dominant;
    `alpha` controls how much denoising-level credit is layered on top.
 
-Nothing about the actor changes. `V_in` and the Q ensemble exist only to build the
-advantage, and at evaluation time a DIA policy is an ordinary diffusion policy.
-
-The knobs that matter live under `train:` in each config: `v_inner_alpha` (the `alpha`
-above), `v_inner_lambda` (`lambda_in`), `q_aggregation`, `critic_q_lr`,
-`target_ema_rate`, and `n_critic_warmup_itr`.
-
-## Relationship to DPPO
-
-This repository is a fork of [DPPO](https://github.com/irom-princeton/dppo)
-([paper](https://arxiv.org/abs/2409.00588)), and DPPO is both the codebase it is built
-on and the baseline it is compared against. The environment wrappers, diffusion policy,
-PPO update, dataset handling and configuration layout are DPPO's. DIA adds:
-
-- `agent/finetune/train_ppo_dia_diffusion_agent.py` and
-  `model/diffusion/diffusion_ppo_dia.py`, the agent and model implementing the above
-- `CriticObsInnerState` in `model/common/critic.py`, the inner value network
-- one `ft_dia_diffusion_mlp.yaml` per task under `cfg/`
-- the ablation agents under `agent/finetune/train_ablation_*.py`
-- a residual-RL baseline under `agent/residual/`
-
-The DPPO baseline in every comparison is this repository's own
-`ft_ppo_diffusion_mlp.yaml`, unchanged from upstream apart from the settings a fair
-comparison requires.
 
 ## Reproducing the results
 

@@ -41,11 +41,7 @@ class PPODIADiffusion(PPODiffusion):
 
     @torch.no_grad()
     def compute_q_safe(self, cond, action):
-        """Aggregated Q via frozen Q_target across N ensemble heads. Returns (B,).
-
-        q_aggregation is "mean" (average over heads) or "min" (the pessimistic
-        head). The "_safe" in the method name is left over from a third option that
-        was removed before release; no run ever used it."""
+        """Aggregated Q via frozen Q_target across N heads. "mean" or "min". Returns (B,)."""
         qs = self.critic_q_target(cond, action)
         if not isinstance(qs, tuple):
             qs = (qs,)

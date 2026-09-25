@@ -9,10 +9,6 @@ import logging
 
 log = logging.getLogger(__name__)
 
-# Fallbacks used only when the config does not set these keys. Every config that
-# ships in cfg/ sets them explicitly, so these values change no shipped result;
-# they exist so the knobs stay settable and get recorded like every other one.
-# The sibling flat-GAE agent reads q_update_epochs the same way.
 Q_UPDATE_EPOCHS = 20
 V_INNER_MINIBATCH_SIZE = 1024
 
@@ -27,11 +23,7 @@ class TrainPPODIADiffusionAgent(TrainPPOAgent):
         # DPPO actor-side knobs (from train_ppo_diffusion_agent)
         self.reward_horizon = cfg.get("reward_horizon", self.act_steps)
 
-        # Q critic optimizer. Built exactly like DPPO's outer value critic
-        # optimizer in train_ppo_agent: AdamW with the same weight decay, and a
-        # cosine schedule with warmup restarts on the same cycle/min-lr/warmup
-        # settings. The only difference is that it optimizes the Q ensemble and
-        # uses critic_q_lr, which falls back to critic_lr when unset.
+        # Q critic optimizer, as train_ppo_agent builds the outer one but at critic_q_lr
         critic_q_lr = float(cfg.train.get("critic_q_lr", cfg.train.critic_lr))
         self.critic_q_optimizer = torch.optim.AdamW(
             self.model.critic_q.parameters(),
@@ -54,11 +46,7 @@ class TrainPPODIADiffusionAgent(TrainPPOAgent):
 
         self.batch_size = int(cfg.train.batch_size)
 
-        # ---------- V_inner: the inner-MDP value ----------
-        # Train critic_v_inner(s, x_k, k) by regressing it onto the target-Q at the
-        # chain's emitted action, Q_target(s, chain[K_ft]); then form A_inner by an
-        # inner GAE along k (zero inner reward, lambda = v_inner_lambda) and add it to
-        # A_outer after matching its std, so alpha is a mixing weight not a scale knob.
+        # ---------- V_inner ----------
         self.v_inner_alpha = float(cfg.train.get("v_inner_alpha", 1.0))
         self.v_inner_lambda = float(cfg.train.get("v_inner_lambda", 0.95))
         self.v_inner_update_epochs = int(cfg.train.get("v_inner_update_epochs", 5))
@@ -93,17 +81,13 @@ class TrainPPODIADiffusionAgent(TrainPPOAgent):
         )
 
     def scale_match_inner(self, A_inner, advantages_outer):
-        """Rescale the inner advantage to the outer advantage's standard deviation.
-
-        Global over the batch, not per denoising step k, so alpha means the same
-        thing at every k."""
+        """Rescale A_inner to sd(A_outer), globally over the batch rather than per k."""
         sigma_outer = float(advantages_outer.std()) + 1e-8
         sigma_inner = float(A_inner.std()) + 1e-8
         return A_inner * (sigma_outer / sigma_inner)
 
     def run(self):
         timer_start = time.time()
-        # Resume from a saved checkpoint if resume_from_itr is set (else start at 0).
         resume_itr = int(self.cfg.train.get("resume_from_itr", 0))
         if resume_itr > 0:
             self.load(resume_itr)
@@ -113,8 +97,7 @@ class TrainPPODIADiffusionAgent(TrainPPOAgent):
             self.itr = 0
         last_itr_eval = False
         done_venv = np.zeros((1, self.n_envs))
-        # Bound before the loop: with reset_at_iteration=False (kitchen) a resumed run
-        # would otherwise reach the rollout with prev_obs_venv unassigned.
+        # bound here: a resumed run with reset_at_iteration=False reaches the rollout unset
         prev_obs_venv = None
         while self.itr < self.n_train_itr:
             options_venv = [{} for _ in range(self.n_envs)]
@@ -181,10 +164,7 @@ class TrainPPODIADiffusionAgent(TrainPPOAgent):
                 reward_trajs[step] = reward_venv
                 terminated_trajs[step] = terminated_venv
                 firsts_trajs[step + 1] = done_venv
-                # robomimic: info_venv is a per-env list of dicts carrying "final_obs" on
-                # truncation (the multi_step wrapper resets within the step). furniture: the env
-                # is natively vectorized, info_venv is a single batched dict, and with
-                # reset_within_step=False obs_venv is already the true next obs (no final_obs).
+                # robomimic puts the pre-reset obs in info["final_obs"]; furniture returns it directly
                 robomimic_info = isinstance(info_venv, (list, tuple))
                 for i in range(self.n_envs):
                     if robomimic_info and truncated_venv[i] and "final_obs" in info_venv[i]:
@@ -208,9 +188,7 @@ class TrainPPODIADiffusionAgent(TrainPPOAgent):
                 ]
                 episode_reward = np.array([np.sum(r) for r in rew_split])
                 if self.furniture_sparse_reward:
-                    # furniture: reward occurs in a single env step (sparse terminal), so the
-                    # episode sum IS the best reward; do NOT divide by act_steps (that's a
-                    # robomimic-only normalization and would zero out the success rate).
+                    # furniture reward is sparse-terminal: use the episode sum, not the act_steps mean
                     episode_best_reward = episode_reward
                 else:
                     episode_best_reward = np.array(
@@ -288,16 +266,14 @@ class TrainPPODIADiffusionAgent(TrainPPOAgent):
                 returns_outer = advantages_outer + values_trajs
                 adv_outer_abs_mean = float(np.abs(advantages_outer).mean())
 
-                # ---------- 2D per-K advantages: base = A_outer broadcast ----------
-                # A_inner (inner GAE over V_inner) is added in the V_inner block below.
+                # ---------- 2D per-K advantages: A_outer broadcast; A_inner added below ----------
                 advantages_2d = advantages_outer[:, :, None] + np.zeros((1, 1, K_ft))  # (S, E, K_ft)
                 returns_2d = (
                     returns_outer[:, :, None] + np.zeros((1, 1, K_ft))            # returns broadcast (used for V loss)
                 )
                 values_2d = values_trajs[:, :, None] + np.zeros((1, 1, K_ft))
 
-                # ---------- Convert to flat tensors for actor PPO loop ----------
-                # Sampling indexes: (batch_idx, denoising_idx) over total = S*E*K_ft
+                # ---------- Flatten to (batch_idx, denoising_idx) over S*E*K_ft ----------
                 obs_flat_d = obs_state_d.reshape(N, *obs_state_d.shape[2:])         # (N, To, Do)
                 chains_flat_d = chains_d.reshape(N, K_ft + 1, self.horizon_steps, self.action_dim)
                 advantages_flat = torch.tensor(
@@ -317,8 +293,7 @@ class TrainPPODIADiffusionAgent(TrainPPOAgent):
                 obs_flat_for_q = obs_state_d.reshape(N, *obs_state_d.shape[2:])
                 next_obs_flat_for_q = next_obs_state_d.reshape(N, *next_obs_state_d.shape[2:])
                 actions_flat_for_q = actions_d.reshape(N, self.horizon_steps, self.action_dim)
-                # Q is trained on the raw environment reward, not the running-scaled
-                # reward the outer GAE uses, so the Q target and V_inner stay in return units.
+                # Q trains on the raw env reward, so its target stays in return units
                 rewards_flat_for_q = torch.from_numpy(
                     np.ascontiguousarray(reward_trajs.reshape(N))
                 ).float().to(self.device) * self.q_scale_reward_factor
@@ -347,10 +322,7 @@ class TrainPPODIADiffusionAgent(TrainPPOAgent):
                 self.model.update_critic_q_target(self.target_ema_rate)
                 critic_q_loss_avg = float(np.mean(q_losses)) if q_losses else 0.0
 
-                # ---------- V_inner: regress to the target Q at the emitted action x_K ----------
-                # Inner MDP: r_inner_per_step = 0, terminal value = Q_target(s, chain[K_ft]).
-                # Target is the SAME scalar for all k on a chain — but inputs vary, so V_inner
-                # ends up reflecting "how much chain[k] reveals about Q(s, terminal)" per k.
+                # ---------- V_inner: regress to Q_target(s, chain[K_ft]), one target per chain ----------
                 v_inner_loss_avg = 0.0
                 a_inner_abs_mean = 0.0
                 a_inner_scaled_mean = 0.0
@@ -365,9 +337,7 @@ class TrainPPODIADiffusionAgent(TrainPPOAgent):
                 cond_all = obs_state_d.reshape(N, *obs_state_d.shape[2:])
                 chains_all = chains_d.reshape(N, K_total, self.horizon_steps, self.action_dim)
                 v_inner_losses = []
-                # Expand each sample to ALL K_total chain positions per minibatch.
-                # B base samples → B*K_total (s, x_k, k, target) triples each minibatch.
-                # Guarantees full per-k coverage every epoch (vs random-k sampling).
+                # expand each sample over all K_total positions, so every k is covered each epoch
                 for _ in range(self.v_inner_update_epochs):
                     perm = torch.randperm(N, device=self.device)
                     for st in range(0, N, self.v_inner_minibatch_size):
@@ -406,8 +376,7 @@ class TrainPPODIADiffusionAgent(TrainPPOAgent):
                 v_inner_start_mean = float(V_inner_grid[:, :, 0].mean())
                 v_inner_final_mean = float(V_inner_grid[:, :, -1].mean())
 
-                # Inner GAE: δ_k = V[k+1] - V[k]; A[k] = δ_k + λ_in A[k+1].
-                # No within-chain discount: the recursion below has no γ_in factor.
+                # inner GAE: d_k = V[k+1] - V[k]; A[k] = d_k + lam_in * A[k+1], no within-chain discount
                 A_inner = np.zeros((S, E, K_ft), dtype=np.float32)
                 lastgae_in = np.zeros((S, E), dtype=np.float32)
                 for k in reversed(range(K_ft)):
@@ -443,11 +412,7 @@ class TrainPPODIADiffusionAgent(TrainPPOAgent):
                     advantages_2d.reshape(N, K_ft), device=self.device, dtype=torch.float32
                 )
 
-                # ---------- PPO actor + V update via PPODiffusion.loss ----------
-                # Run EVERY iter so V_outer (critic) warms up while the actor is frozen;
-                # the actor optimizer step is gated by warmup below (DPPO parity). Without
-                # this, V_outer got zero training during warmup -> untrained value baseline
-                # at activation -> garbage A_outer -> the first actor step crashed reward.
+                # ---------- PPO actor + V: run every iter so V_outer trains during actor warmup ----------
                 if True:
                     total_steps = N * K_ft
                     clipfracs = []; kls = []; pg_losses = []; v_losses = []
@@ -518,10 +483,7 @@ class TrainPPODIADiffusionAgent(TrainPPOAgent):
                     kl_mean = float(np.mean(kls)) if kls else 0.0
                     clipfrac_mean = float(np.mean(clipfracs)) if clipfracs else 0.0
 
-                # LR step. The actor schedule is gated on the critic warmup exactly as
-                # in train_ppo_diffusion_agent: during warmup the actor is frozen, so
-                # advancing its cosine schedule would leave the two agents on different
-                # actor LRs for the rest of the run.
+                # LR step; actor schedule gated on warmup, as in train_ppo_diffusion_agent
                 if self.itr >= self.n_critic_warmup_itr:
                     self.actor_lr_scheduler.step()
                 self.critic_lr_scheduler.step()

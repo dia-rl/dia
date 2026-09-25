@@ -122,8 +122,7 @@ class TrainPPODIAImgDiffusionAgent(TrainPPODIADiffusionAgent):
                 terminated_trajs[step] = terminated_venv
                 firsts_trajs[step + 1] = done_venv
 
-                # next obs for the Q target; on truncation the wrapper resets within the
-                # step, so the true next obs arrives in info as "final_obs"
+                # next obs for the Q target; on truncation it arrives in info["final_obs"]
                 robomimic_info = isinstance(info_venv, (list, tuple))
                 for i in range(self.n_envs):
                     if robomimic_info and truncated_venv[i] and "final_obs" in info_venv[i]:
@@ -330,8 +329,7 @@ class TrainPPODIAImgDiffusionAgent(TrainPPODIADiffusionAgent):
                     for st in range(0, N, self.v_inner_minibatch_size):
                         idx = perm[st : st + self.v_inner_minibatch_size]
                         B = idx.shape[0]
-                        # encode the image ONCE per sample, then expand the feature
-                        # over the K_total chain positions
+                        # encode the image once per sample, expand over K_total positions
                         feat = self.model.critic_v_inner.encode(
                             {k: obs_flat[k][idx] for k in obs_flat}, no_augment=True
                         )

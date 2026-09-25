@@ -8,7 +8,7 @@ Arjun Sohal<sup>1</sup>, Yuchi Zhao<sup>1,2</sup>, Miroslav Bogdanovic<sup>1,2,3
 <sup>3</sup>Acceleration Consortium, University of Toronto&nbsp;&nbsp;<sup>4</sup>Canadian Institute for Advanced Research (CIFAR)&nbsp;&nbsp;<sup>5</sup>NVIDIA
 
 > DIA is a policy-gradient method for fine-tuning diffusion policies. It learns a
-> value function over *partially denoised* actions and turns it into a per-denoising-step
+> value function over partially denoised actions and turns it into a per-denoising-step
 > advantage, so the optimizer can tell which intermediate decisions in the denoising
 > chain contributed to the return.
 
@@ -29,7 +29,7 @@ chain finally emits:
    iteration at `target_ema_rate`.
 2. **An inner value** `V_in(s, x_k, k)` is regressed onto the target Q at the emitted
    action, `Q_target(s, a_0)`. The regression target is one scalar per chain, shared by
-   every `k`, but the *inputs* vary along the chain, so `V_in` learns how much `x_k`
+   every `k`, but the inputs vary along the chain, so `V_in` learns how much `x_k`
    already reveals about the value of the action the chain will produce.
 3. **An inner advantage** is a GAE along `k` over the differences in that value, with no
    environment reward inside a chain and no within-chain discount:

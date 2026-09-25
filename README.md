@@ -1,10 +1,11 @@
 # DIA: Denoising Intermediate Advantage
 
-[[Project page](https://dia-rl.github.io)]&nbsp;&nbsp;[[Built on DPPO](https://github.com/irom-princeton/dppo)]
+[[Paper](https://arxiv.org/abs/2609.12245)]&nbsp;&nbsp;[[Project page](https://dia-rl.github.io)]&nbsp;&nbsp;[[Built on DPPO](https://github.com/irom-princeton/dppo)]
 
 Arjun Sohal<sup>1</sup>, Yuchi Zhao<sup>1,2</sup>, Miroslav Bogdanovic<sup>1,2,3</sup>, Alan Aspuru-Guzik<sup>1,2,3,4,5</sup>
 
-<sup>1</sup>University of Toronto&nbsp;&nbsp;<sup>2</sup>Vector Institute for Artificial Intelligence
+<sup>1</sup>University of Toronto&nbsp;&nbsp;<sup>2</sup>Vector Institute for Artificial Intelligence<br>
+<sup>3</sup>Acceleration Consortium, University of Toronto&nbsp;&nbsp;<sup>4</sup>Canadian Institute for Advanced Research (CIFAR)&nbsp;&nbsp;<sup>5</sup>NVIDIA
 
 > DIA is a policy-gradient method for fine-tuning diffusion policies. It learns a
 > value function over *partially denoised* actions and turns it into a per-denoising-step

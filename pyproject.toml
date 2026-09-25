@@ -3,9 +3,9 @@ requires = ["setuptools>=61.0"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "dppo"
+name = "dia"
 version = "0.8.0"
-description = "Fine-tuning diffusion policies with PPO."
+description = "DIA: Denoising Intermediate Advantage for diffusion policy fine-tuning."
 readme = "README.md"
 requires-python = ">=3.8"
 classifiers = [

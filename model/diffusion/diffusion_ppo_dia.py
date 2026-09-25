@@ -1,19 +1,13 @@
-"""Model side of DIA: the Q ensemble and V_inner that the agent trains.
+"""DIA: Denoising Intermediate Advantage.
 
-PPODiffusion subclass that adds two critics used ONLY to build the inner
-advantage; the actor loss is the unmodified DPPO loss (PPODiffusion.loss), and the
-agent injects the combined advantage into it.
+Adds a Q ensemble and an inner value over the denoising chain to PPODiffusion;
+the actor loss is unchanged and the agent injects the combined advantage.
 
-  - critic_q: an n-head CriticObsAct ensemble over (s, a) trained on env
-    transitions, alongside a target copy that the agent refreshes at
-    `target_ema_rate`. That rate is 1.0 in every config here, so the refresh is a
-    hard copy rather than a Polyak average. `q_aggregation` selects how the heads
-    are reduced to the single value V_inner regresses onto: "mean", which averages
-    them, or "min", which takes the pessimistic head. Every config in cfg/ uses
-    "mean"; "min" is kept because it is a one-word change to try.
-  - critic_v_inner: CriticObsInnerState, V_in(s, x_k, k), regressed by the agent
-    onto the aggregated target-Q at the chain's final action.
-
+K: number of denoising steps
+To: observation sequence length
+Ta: action chunk size
+Do: observation dimension
+Da: action dimension
 """
 import copy
 import torch

@@ -1,31 +1,4 @@
-"""DIA: DPPO plus an inner-value advantage over the denoising chain.
-
-Standard DPPO actor/V training path (uses PPODiffusion.loss for the actor, so it
-inherits the time-varying clip, joint optimization, value loss and entropy).
-Adds, on top of that:
-
-  - Q critic: an n-head CriticObsAct ensemble trained on env transitions. n_heads
-    comes from the config and is 2 in every paper config except kitchen, which
-    uses 10. Its target network is refreshed by `target_ema_rate`, which is 1.0 in
-    every paper config, so the refresh is a hard copy and not a Polyak average.
-    The heads are aggregated by `q_aggregation` ("mean" everywhere). No CQL term.
-  - Regression target for V_inner: the aggregated target-Q evaluated at the action
-    the denoising chain actually emits, Q(s, a_0).
-  - V_inner: CriticObsInnerState, V_in(s, x_k, k), regressed onto that Q. It is the
-    value of a partially denoised action, so it varies along the chain.
-  - Inner advantage: an inner GAE over V_inner along k, with zero inner reward and
-    no within-chain discount, only the trace decay v_inner_lambda. Its scale is
-    then matched to the outer advantage globally, A_in_scaled = A_in *
-    (sigma_out / sigma_in), which is what makes alpha a meaningful mixing weight
-    rather than a scale knob.
-  - Combined 2D advantage: adv[s, e, k] = A_outer[s, e] + alpha * A_in_scaled[s, e, k],
-    with A_outer from the standard outer GAE.
-
-The DIA_DUMP_ADV env var dumps the advantage arrays for one iteration and exits.
-The inner-noise ablation lives in train_ablation_dia_noise_agent.py.
-
-Vanilla DPPO code path only.
-"""
+"""DIA fine-tuning."""
 import os
 import math
 import time

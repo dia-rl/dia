@@ -1,16 +1,4 @@
-"""DIA fine-tuning for pixel observations.
-
-Image counterpart of train_ppo_dia_diffusion_agent, standing in the same relation
-to it as train_ppo_diffusion_img_agent does to train_ppo_diffusion_agent: the
-observation becomes a {state, rgb} dict, images are randomized once per iteration,
-and the actor update accumulates gradients over several batches.
-
-The one image-specific design choice is where the ViT encoding happens. The image
-does not change with the denoising index, so V_k encodes each observation once per
-minibatch and expands the resulting feature over the K_ft+1 chain positions. The
-encoder still receives gradient from every chain position, but the backbone runs
-once per sample instead of K_ft+1 times.
-"""
+"""DIA fine-tuning for pixel observations."""
 
 import os
 import math
